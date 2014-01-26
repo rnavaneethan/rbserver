@@ -31,11 +31,12 @@ function dbInit() {
   userSchema = new mongoose.Schema({
     'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
     'email' : {type: String, select: true, unique: true, index: true, required: true},
+    'gcmID' : {type: String, unique: true, required: true},
     'phone': {type: String},
-    'lat' : {type: Number, default: "0.0"},
-    'lon' : {type: Number, default: "0.0"}
+    'loc': []
   });
   userSchema.plugin(createdModifiedPlugin, {index: true});
+  userSchema.index({'loc': '2d'});
   model = db.model('user', userSchema);
 }
 /*start connect server here*/
@@ -93,21 +94,17 @@ function _update(u, e, lat, lon) {
   }
   
   //only if user is in DB, update it
-  model.findOneQ({name: u}).then(function(e, doc){
-    console.log('Err'+ JSON.stringify(e));
-    console.log('Doc' + doc);
-    if(e || !doc ) {
-      d.reject('User is not found!');
-      return;  
-    }
+  model.where({name: u}).findOneQ().then(function(doc){
     //update to DB
-    model.findOneAndUpdateQ({name: u}, {name: u, email: e, lat: lat, lon: lon}, {new: true}).then(function (e, doc) {
+    model.findOneAndUpdateQ({name: u}, {name: u, email: e, 'loc': [lon, lat]}, {new: true}).then(function (doc) {
       d.resolve('Updated');
+    }, function(e) {
+      d.reject('Failed to update!');
     });
   }, function() {
     d.reject('User is not found!');
   });
-    
+  
   return d.promise;
 }
 
@@ -133,19 +130,72 @@ function _list(q) {
   model.findQ().then(function(doc){
     //console.log(JSON.stringify(doc));
     //map and extract only necessary fields
-    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'lat': v.lat, 'lon': v.lon}; });
+    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc}; });
     d.resolve(u);
     return;
   });
   return d.promise;
 }
 function register(req, response, next) {
-  _register().then(function(r) {
-    response.render('register', r);
+  var user = req.query.user || '',
+    email = req.query.email || '',
+    phone = req.query.phone || '',
+    gcm = req.query.gcm || '',
+    result = {
+      'code': 'fail',
+      'msg':'unexpected result'
+    };
+  _register(user, email, phone, gcm).then(function(r) {
+    result.code = "ok";
+    result.msg = r;
+  }, function (r) {
+    result.msg = r;
+  }).finally(function () {
+    response.render('register', result);
   });
 }
 
-function _register() {
-  var d = Q.defer();
+function _register(u, e, p, gcm) {
+  var d = Q.defer(), bFound = false, bFailed = false;
+  if(u.length === 0 ) {
+    msg = "Username is must!";
+    bFailed = true;
+  } else if (e.length === 0) {
+    msg = "Please send valid email address!";
+    bFailed = true;
+  } else if (p.length === 0) {
+    bFailed = true;
+    msg = 'Give valid phone number';
+  } else if(gcm.length === 0 ) {
+    bFailed = true;
+    msg = "GCM ID is missing"
+  }
+  if(bFailed) {
+    msg = msg || 'Invalid params!';
+    d.reject(msg);
+  }
+  
+  //Find if the user is available
+  //Search by name / email address
+  var qu = model.where({name: u}).or({email: e}).findOneQ().then(function(doc) {
+    if(!doc) {
+      //let's insert the new user
+      var user = new model();
+      user.name = u;
+      user.email = e;
+      user.phone = p;
+      user.gcmID = gcm;
+      user.save(function(e) {
+        if (e) {
+          d.reject('Failed to save');
+        }
+        d.resolve('User Created');
+      });
+    } else {
+      d.reject('User/email already exist');
+    }
+  }, function(e) {
+    d.reject('Unexpected DB error. Try again!');
+  });
   return d.promise;
 }

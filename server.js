@@ -2,6 +2,8 @@ var mongoose= require('mongoose-q')(),
   Q = require('q'),
   connect = require('connect'),
   express = require('express'),
+  http = require('http'),
+  qs = require('querystring'),
   createdModifiedPlugin = require('mongoose-createdmodified').createdModifiedPlugin,
   _ = require('lodash');
   
@@ -15,6 +17,7 @@ var server = 'localhost',
 var apiv1 = connect()
   .use(connect.query())   //use query processing middleware
   .use('/register', register)
+  .use('/notify', notify)
   .use('/update', update)
   .use('/list', list);
   
@@ -30,7 +33,7 @@ db.once('open', function cb(){
 function dbInit() {
   userSchema = new mongoose.Schema({
     'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
-    'email' : {type: String, select: true, unique: true, index: true, required: true},
+    'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
     'gcmID' : {type: String, unique: true, required: true},
     'phone': {type: String},
     'loc': []
@@ -187,6 +190,7 @@ function _register(u, e, p, gcm) {
       user.gcmID = gcm;
       user.save(function(e) {
         if (e) {
+          console.log(e);
           d.reject('Failed to save');
         }
         d.resolve('User Created');
@@ -198,4 +202,69 @@ function _register(u, e, p, gcm) {
     d.reject('Unexpected DB error. Try again!');
   });
   return d.promise;
+}
+
+function _notify(to, m) {
+  var d = Q.defer(), bFailed = false, msg = '';
+  if (!to.length) {
+    bFailed = true;
+    msg = 'Need valid email address of recipient';
+  }else if (!m.length) {
+    bFailed = true;
+    msg = 'Empty message';
+  }
+  if( bFailed ) {
+    d.reject(msg);
+  }
+  
+  //check for presence of recipient
+  model.findQ({email: to}).then(function (doc) {
+    if(!doc.length) {
+      d.reject('Recipient is not found');
+    }
+    //Ensure that gcmID is there and then send message
+    console.log(JSON.stringify(doc));
+    sendGCM(doc[0].gcmID,  m);
+    d.resolve('sent');
+  }, function (e) {
+    d.reject('Recipient not found');
+  });
+  return d.promise;
+}
+
+function notify(req, response, next) {
+  var to = req.query.to || '',
+    m = req.query.msg || '',
+    result = {
+      code: 'fail',
+      msg: '' 
+    };
+  _notify(to, m).then(function(r) {
+    result.code = "ok";
+    result.msg = r;
+  }, function (r) {
+    result.msg = r;
+  }).finally(function () {
+    response.render('register', result);
+  });
+}
+
+function sendGCM(gcmID, msg) {
+  
+  var o = {
+    host: 'android.googleapis.com',
+    port: 443,
+    path: '/gcm/send',
+    method: 'GET',
+    headers: {
+      'Authorization': 'key=AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s'
+    }
+  };
+  var params = qs.stringify({registration_id: gcmID, 'data.message': msg});
+  o.path += '?' + params;
+  console.log('GCM: ' + o.path);
+  http.request(o, function() {
+  }).on('error', function () {
+  });
+  return;
 }

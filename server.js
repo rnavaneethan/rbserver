@@ -70,8 +70,7 @@ function update(req, response, next) {
     result.msg = r;
   }, function(r) {
     result.msg = r;
-  }).finally(function(r) {
-    result.msg = r;
+  }).finally(function() {
     response.render('update', result);
   });
 }

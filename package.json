@@ -10,6 +10,7 @@
     "lodash": "*",
     "express":"*",
     "ejs": "*",
-    "connect": "*"
+    "connect": "*",
+    "mongoose-createdmodified":"*"
   }
 }

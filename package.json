@@ -1,0 +1,14 @@
+{
+  "name":"RideBuddyServer",
+  "main": "./server.js",
+  "version" : "1.0.0",
+  "description": "NodeJS + MongoDB server for RideBuddy",
+  "dependencies" : {
+    "q" : "*",
+    "mongoose" : "*",
+    "mongoose-q" : "*",
+    "lodash": "*",
+    "express":"*",
+    "ejs": "*"
+  }
+}

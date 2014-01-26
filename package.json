@@ -9,6 +9,7 @@
     "mongoose-q" : "*",
     "lodash": "*",
     "express":"*",
-    "ejs": "*"
+    "ejs": "*",
+    "connect": "*"
   }
 }

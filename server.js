@@ -92,33 +92,49 @@ function _update(u, e, lat, lon) {
     d.reject(msg);
   }
   
-  //update to DB
-  model.findOneAndUpdateQ({name: u}, {name: u, email: e, lat: lat, lon: lon}, {upsert: true}).then(function (c) {
-    d.resolve('Updated');
-    return;
+  //only if user is in DB, update it
+  model.findOneQ({name: u}).then(function(e, doc){
+    console.log('Err'+ JSON.stringify(e));
+    console.log('Doc' + doc);
+    if(e || !doc ) {
+      d.reject('User is not found!');
+      return;  
+    }
+    //update to DB
+    model.findOneAndUpdateQ({name: u}, {name: u, email: e, lat: lat, lon: lon}, {new: true}).then(function (e, doc) {
+      d.resolve('Updated');
+    });
+  }, function() {
+    d.reject('User is not found!');
   });
     
   return d.promise;
 }
 
 function list(req, response, next) {
-  _list().done(function(r){
-
-      response.render('list',r);
+  var result = {
+    'code':'fail',
+    'msg':''
+  };
+  _list().then(function(r){
+      result.code = 'ok';
+      result.users = r;
+  }, function(r) {
+    //failure handler
+    result.code = 'fail';
+    result.msg = r;
+  }).finally(function () {
+    response.render('list',result);
   });
 }
 
 function _list(q) {
-  var result = {
-    "code": "ok",
-    "msg":"",
-    "users": {}
-  };
   var d = Q.defer();
   model.findQ().then(function(doc){
-    console.log(JSON.stringify(doc));
-    result.users = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'lat': v.lat, 'lon': v.lon}; });
-    d.resolve(result);
+    //console.log(JSON.stringify(doc));
+    //map and extract only necessary fields
+    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'lat': v.lat, 'lon': v.lon}; });
+    d.resolve(u);
     return;
   });
   return d.promise;

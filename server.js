@@ -85,10 +85,10 @@ function _update(u, e, lat, lon) {
   if(u.length === 0 ) {
     msg = "Username is must!";
     bFailed = true;
-  } else if (e.length === 0) {
+  } /*else if (e.length === 0) {
     msg = "Please send valid email address!";
     bFailed = true;
-  } else if (lat.length === 0 || lon.length === 0) {
+  } */else if (lat.length === 0 || lon.length === 0) {
     bFailed = true;
   }
   if(bFailed) {
@@ -133,7 +133,7 @@ function _list(q) {
   model.findQ().then(function(doc){
     //console.log(JSON.stringify(doc));
     //map and extract only necessary fields
-    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc}; });
+    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; });
     d.resolve(u);
     return;
   });

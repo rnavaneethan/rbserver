@@ -133,7 +133,8 @@ function _list(q) {
   model.findQ().then(function(doc){
     //console.log(JSON.stringify(doc));
     //map and extract only necessary fields
-    var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; });
+    //var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; });
+    var u = _(doc).filter(function(v) { var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; }).map(function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; }).value();
     d.resolve(u);
     return;
   });

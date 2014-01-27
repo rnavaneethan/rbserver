@@ -36,7 +36,7 @@ function dbInit() {
     'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
     'gcmID' : {type: String, unique: true, required: true},
     'phone': {type: String},
-    'loc': []
+    'loc': { type: [Number], index: '2dsphere'}
   });
   userSchema.plugin(createdModifiedPlugin, {index: true});
   userSchema.index({'loc': '2dsphere'});
@@ -63,8 +63,8 @@ function startServer() {
 function update(req, response, next) {
   var user = req.query.user || '',
     email = req.query.email || '',
-    lat = req.query.lat || '',
-    lon = req.query.lon || '',
+    lat = req.query.lat || 0,
+    lon = req.query.lon || 0,
     result = {
       'code': 'fail',
       'msg':'unexpected result'
@@ -88,7 +88,7 @@ function _update(u, e, lat, lon) {
   } /*else if (e.length === 0) {
     msg = "Please send valid email address!";
     bFailed = true;
-  } */else if (lat.length === 0 || lon.length === 0) {
+  } */else if (lat === 0 || lon === 0) {
     bFailed = true;
   }
   if(bFailed) {
@@ -99,7 +99,7 @@ function _update(u, e, lat, lon) {
   //only if user is in DB, update it
   /*model.where({name: u}).findOneQ().then(function(doc){*/
     //update to DB
-    model.findOneAndUpdateQ({name: u}, {name: u, email: e, 'loc': [lon, lat]}, {new: true}).then(function (doc) {
+    model.findOneAndUpdateQ({name: u}, {name: u, email: e, 'loc': [lon, lat]}, {new: true, upsert: true}).then(function (doc) {
       d.resolve('Updated');
     }, function(e) {
       d.reject('Failed to update!');
@@ -130,14 +130,15 @@ function list(req, response, next) {
 
 function _list(q) {
   var bNear = (q.query.search || '') === 'nearby',
-    lat = q.query.lat || '',
-    lon = q.query.lon || '';
+    lat = q.query.lat || 0,
+    lon = q.query.lon || 0;
   var d = Q.defer(), d2;
-  if(bNear && lat.length && lon.length) {
+  if(bNear && lat && lon ) {
     //query based on geo spatial
+
     d2 = model.findQ({
       loc: {
-        $near : { $geometry :  { type : "Point" , coordinates : [lon, lat] } },
+        $nearSphere : [lon, lat],
         $maxDistance : 500
       }
     });
@@ -151,6 +152,7 @@ function _list(q) {
     var u = _(doc).filter(function(v) { var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; }).map(function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; }).value();
     d.resolve(u);
   }, function (e) {
+    console.log('On Error ' + e);
     d.reject(e);
   });
   return d.promise;

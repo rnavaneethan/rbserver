@@ -39,7 +39,7 @@ function dbInit() {
     'loc': []
   });
   userSchema.plugin(createdModifiedPlugin, {index: true});
-  userSchema.index({'loc': '2d'});
+  userSchema.index({'loc': '2dsphere'});
   model = db.model('user', userSchema);
 }
 /*start connect server here*/
@@ -116,7 +116,7 @@ function list(req, response, next) {
     'code':'fail',
     'msg':''
   };
-  _list().then(function(r){
+  _list(req).then(function(r){
       result.code = 'ok';
       result.users = r;
   }, function(r) {
@@ -129,14 +129,29 @@ function list(req, response, next) {
 }
 
 function _list(q) {
-  var d = Q.defer();
-  model.findQ().then(function(doc){
-    //console.log(JSON.stringify(doc));
+  var bNear = (q.query.search || '') === 'nearby',
+    lat = q.query.lat || '',
+    lon = q.query.lon || '';
+  var d = Q.defer(), d2;
+  if(bNear && lat.length && lon.length) {
+    //query based on geo spatial
+    d2 = model.findQ({
+      loc: {
+        $near : { $geometry :  { type : "Point" , coordinates : [lon, lat] } },
+        $maxDistance : 500
+      }
+    });
+  } else {
+    d2 = model.findQ();
+  }
+  d2.then(function(doc){
+    console.log(JSON.stringify(doc));
     //map and extract only necessary fields
     //var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; });
     var u = _(doc).filter(function(v) { var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; }).map(function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; }).value();
     d.resolve(u);
-    return;
+  }, function (e) {
+    d.reject(e);
   });
   return d.promise;
 }

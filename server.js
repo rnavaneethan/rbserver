@@ -97,16 +97,16 @@ function _update(u, e, lat, lon) {
   }
   
   //only if user is in DB, update it
-  model.where({name: u}).findOneQ().then(function(doc){
+  /*model.where({name: u}).findOneQ().then(function(doc){*/
     //update to DB
     model.findOneAndUpdateQ({name: u}, {name: u, email: e, 'loc': [lon, lat]}, {new: true}).then(function (doc) {
       d.resolve('Updated');
     }, function(e) {
       d.reject('Failed to update!');
     });
-  }, function() {
+  /*}, function() {
     d.reject('User is not found!');
-  });
+  });*/
   
   return d.promise;
 }

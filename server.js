@@ -138,8 +138,9 @@ function _list(q) {
 
     d2 = model.findQ({
       loc: {
-        $nearSphere : [lon, lat],
-        $maxDistance : 500
+        $near : { $geometry: {type: "Point", coordinates: [lon, lat] },
+          $maxDistance : 1000
+        }
       }
     });
   } else {

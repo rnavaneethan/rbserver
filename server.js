@@ -19,7 +19,8 @@ var apiv1 = connect()
   .use('/register', register)
   .use('/notify', notify)
   .use('/update', update)
-  .use('/list', list);
+  .use('/list', list)
+  .use(apiErrHandler);  //API error handler
   
 /*create connection to db*/
 mongoose.connect(connStr);
@@ -48,17 +49,26 @@ function startServer() {
   app.configure(function () {
     app.set('views', __dirname + '/views');
     app.set('view engine', 'ejs');
+    app.enable('trust proxy');
     app.use(express.compress());
     app.use(express.favicon());
-    app.use(express.logger('dev'));
-    app.use(connect.urlencoded());
-    app.use(connect.json());
+    app.use(express.logger());
+    app.use(express.json());
+    app.use(express.urlencoded());    
     app.use(app.router);
   });
   app.use('/api/v1', apiv1)
     .listen(port);
 }
 
+function apiErrHandler(err, req, response, next) {
+  console.error(err.stack);
+  var result = {
+      'code': 'fail',
+      'msg':'unexpected result'
+    };
+  response.render('update', result);
+}
 
 function update(req, response, next) {
   var user = req.query.user || '',
@@ -139,7 +149,7 @@ function _list(q) {
     d2 = model.findQ({
       loc: {
         $near : { $geometry: {type: "Point", coordinates: [lon, lat] },
-          $maxDistance : 1000
+          $maxDistance : 10000
         }
       }
     });

@@ -10,7 +10,7 @@ var mongoose= require('mongoose-q')(),
 //config const
 var server = 'localhost',
   dbname = 'rb',
-  connStr = 'mongodb://'+server+'/'+db,
+  connStr = 'mongodb://'+server+'/'+dbname,
   port = 3000;
   
 //create handler for api

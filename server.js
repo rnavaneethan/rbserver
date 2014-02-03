@@ -1,19 +1,38 @@
-var mongoose= require('mongoose-q')(),
-  Q = require('q'),
+var Q = require('q'),
   connect = require('connect'),
   express = require('express'),
   http = require('http'),
   qs = require('querystring'),
-  createdModifiedPlugin = require('mongoose-createdmodified').createdModifiedPlugin,
-  _ = require('lodash');
+  _ = require('lodash'),
+  dbu = new require('./dbutils')();
+
+/*Configurations*/
+var port = 3000,
+  dbHost = 'localhost', dbName = 'rb',
+  _result = {
+      'code': 'fail',
+      'msg':'unexpected result'
+    };
+
+/*start the server*/
+var app = express();
+app.configure(function () {
+  app.set('views', __dirname + '/views');
+  app.set('view engine', 'ejs');
+  app.enable('trust proxy');
+  app.use(express.compress());
+  app.use(express.favicon());
+  app.use(express.logger());
+  app.use(express.json());
+  app.use(express.urlencoded());    
+  app.use(app.router);
   
-//config const
-var server = 'localhost',
-  dbname = 'rb',
-  connStr = 'mongodb://'+server+'/'+dbname,
-  port = 3000;
-  
-//create handler for api
+  //connect to DB
+  dbu.init(dbHost,dbName);
+}).listen(port);
+
+/*set path for API
+create handler for api*/
 var apiv1 = connect()
   .use(connect.query())   //use query processing middleware
   .use('/register', register)
@@ -22,243 +41,83 @@ var apiv1 = connect()
   .use('/list', list)
   .use(apiErrHandler);  //API error handler
   
-/*create connection to db*/
-mongoose.connect(connStr);
-var db = mongoose.connection, userSchema, model;
-db.on('error', console.error.bind(console, 'connection error:'));
-db.once('open', function cb(){
-  dbInit();
-	startServer();
-});
-
-function dbInit() {
-  userSchema = new mongoose.Schema({
-    'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
-    'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
-    'gcmID' : {type: String, unique: true, required: true},
-    'phone': {type: String},
-    'loc': { type: [Number], index: '2dsphere'}
-  });
-  userSchema.plugin(createdModifiedPlugin, {index: true});
-  userSchema.index({'loc': '2dsphere'});
-  model = db.model('user', userSchema);
-}
-/*start connect server here*/
-function startServer() {
-  var app = express();
-  app.configure(function () {
-    app.set('views', __dirname + '/views');
-    app.set('view engine', 'ejs');
-    app.enable('trust proxy');
-    app.use(express.compress());
-    app.use(express.favicon());
-    app.use(express.logger());
-    app.use(express.json());
-    app.use(express.urlencoded());    
-    app.use(app.router);
-  });
-  app.use('/api/v1', apiv1)
-    .listen(port);
-}
+app.use('/api/v1', apiv1);
 
 function apiErrHandler(err, req, response, next) {
   console.error(err.stack);
-  var result = {
-      'code': 'fail',
-      'msg':'unexpected result'
-    };
-  response.render('update', result);
+  response.render('default', _result);
 }
 
-function update(req, response, next) {
-  var user = req.query.user || '',
-    email = req.query.email || '',
+function list(req, res, n) {
+  //Extract the query param and pass it on to the DB query handler
+  var srch = req.query.search || '',
     lat = req.query.lat || 0,
     lon = req.query.lon || 0,
-    result = {
-      'code': 'fail',
-      'msg':'unexpected result'
-    };
-  _update(user, email, lat, lon).then(function(r){
+    since = req.query.since || 0,
+    result = _result;
+  dbu.list(srch, lat, lon, since).then(function (r) {
     result.code = 'ok';
-    result.msg = r;
-  }, function(r) {
-    result.msg = r;
-  }).finally(function() {
-    response.render('update', result);
-  });
-}
-
-function _update(u, e, lat, lon) {
-  var msg = "", bFailed = false;
-  var d = Q.defer();
-  if(u.length === 0 ) {
-    msg = "Username is must!";
-    bFailed = true;
-  } /*else if (e.length === 0) {
-    msg = "Please send valid email address!";
-    bFailed = true;
-  } */else if (lat === 0 || lon === 0) {
-    bFailed = true;
-  }
-  if(bFailed) {
-    msg = msg || 'Invalid params!';
-    d.reject(msg);
-  }
-  
-  //only if user is in DB, update it
-  /*model.where({name: u}).findOneQ().then(function(doc){*/
-    //update to DB
-    model.findOneAndUpdateQ({name: u}, {'loc': [lon, lat]}, {new: true, upsert: true}).then(function (doc) {
-      d.resolve('Updated');
-    }, function(e) {
-      d.reject('Failed to update!');
-    });
-  /*}, function() {
-    d.reject('User is not found!');
-  });*/
-  
-  return d.promise;
-}
-
-function list(req, response, next) {
-  var result = {
-    'code':'fail',
-    'msg':''
-  };
-  _list(req).then(function(r){
-      result.code = 'ok';
-      result.users = r;
-  }, function(r) {
-    //failure handler
+    result.users = r;
+  }, function (r) {
     result.code = 'fail';
-    result.msg = r;
+    result.msg = 'Unable to query from DB';
   }).finally(function () {
-    response.render('list',result);
-  });
+    res.render('list', result);
+  });  
 }
 
-function _list(q) {
-  var bNear = (q.query.search || '') === 'nearby',
-    lat = q.query.lat || 0,
-    lon = q.query.lon || 0;
-  var d = Q.defer(), d2;
-  if(bNear && lat && lon ) {
-    //query based on geo spatial
-
-    d2 = model.findQ({
-      loc: {
-        $near : { $geometry: {type: "Point", coordinates: [lon, lat] },
-          $maxDistance : 10000
-        }
-      }
-    });
-  } else {
-    d2 = model.findQ();
-  }
-  d2.then(function(doc){
-    console.log(JSON.stringify(doc));
-    //map and extract only necessary fields
-    //var u = _.map(doc, function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; });
-    var u = _(doc).filter(function(v) { var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; }).map(function (v) { return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; }).value();
-    d.resolve(u);
-  }, function (e) {
-    console.log('On Error ' + e);
-    d.reject(e);
-  });
-  return d.promise;
-}
-function register(req, response, next) {
+function register(req, res, n) {
   var user = req.query.user || '',
     email = req.query.email || '',
     phone = req.query.phone || '',
     gcm = req.query.gcm || '',
-    result = {
-      'code': 'fail',
-      'msg':'unexpected result'
-    };
-  _register(user, email, phone, gcm).then(function(r) {
+    result = _result;
+  dbu.register(user, email, phone, gcm).then(function(r) {
     result.code = "ok";
     result.msg = r;
   }, function (r) {
     result.msg = r;
   }).finally(function () {
-    response.render('register', result);
+    res.render('default', result);
   });
 }
 
-function _register(u, e, p, gcm) {
-  var d = Q.defer(), bFound = false, bFailed = false;
-  if(u.length === 0 ) {
-    msg = "Username is must!";
-    bFailed = true;
-  } else if (e.length === 0) {
-    msg = "Please send valid email address!";
-    bFailed = true;
-  } else if (p.length === 0) {
-    bFailed = true;
-    msg = 'Give valid phone number';
-  } else if(gcm.length === 0 ) {
-    bFailed = true;
-    msg = "GCM ID is missing"
-  }
-  if(bFailed) {
-    msg = msg || 'Invalid params!';
-    d.reject(msg);
-  }
+function update(req, res, n) {
+  var user = req.query.user || '',
+    email = req.query.email || '',
+    lat = req.query.lat || 0,
+    lon = req.query.lon || 0,
+    result = _result;
+  var def = dbu.update(user, email, lat, lon).then(function(r){
+    result.code = 'ok';
+    result.msg = r;
+  }, function(r) {
+    result.msg = r;
+  });
   
-  //Find if the user is available
-  //Search by name / email address
-  var qu = model.where({name: u}).or({email: e}).findOneQ().then(function(doc) {
-    if(!doc) {
-      //let's insert the new user
-      var user = new model();
-      user.name = u;
-      user.email = e;
-      user.phone = p;
-      user.gcmID = gcm;
-      user.save(function(e) {
-        if (e) {
-          console.log(e);
-          d.reject('Failed to save');
-        }
-        d.resolve('User Created');
-      });
+  /*def.finally(function() {
+    res.render('default', result);
+  })*/
+  def.finally(function () {
+    console.log(result.msg);
+    if(result.msg === 'USER_NOT_FOUND') {
+      dbu.register(user).then(function () {
+        dbu.update(user, email, lat, lon).then(function(r){
+          result.code = 'ok';
+          result.msg = r;
+        }, function(r) {
+          result.msg = r;
+        }).finally(function () {
+          res.render('default', result);
+        });
+    	}, function (r) {
+    	  rseult.msg = 'Failed to update';
+    	  res.render('default', result);
+    	});
     } else {
-      d.reject('User/email already exist');
+      res.render('default', result);
     }
-  }, function(e) {
-    d.reject('Unexpected DB error. Try again!');
   });
-  return d.promise;
-}
-
-function _notify(to, m) {
-  var d = Q.defer(), bFailed = false, msg = '';
-  if (!to.length) {
-    bFailed = true;
-    msg = 'Need valid email address of recipient';
-  }else if (!m.length) {
-    bFailed = true;
-    msg = 'Empty message';
-  }
-  if( bFailed ) {
-    d.reject(msg);
-  }
-  
-  //check for presence of recipient
-  model.findQ({email: to}).then(function (doc) {
-    if(!doc.length) {
-      d.reject('Recipient is not found');
-    }
-    //Ensure that gcmID is there and then send message
-    console.log(JSON.stringify(doc));
-    sendGCM(doc[0].gcmID,  m);
-    d.resolve('sent');
-  }, function (e) {
-    d.reject('Recipient not found');
-  });
-  return d.promise;
 }
 
 function notify(req, response, next) {
@@ -274,7 +133,7 @@ function notify(req, response, next) {
   }, function (r) {
     result.msg = r;
   }).finally(function () {
-    response.render('register', result);
+    response.render('default', result);
   });
 }
 
@@ -297,3 +156,4 @@ function sendGCM(gcmID, msg) {
   });
   return;
 }
+

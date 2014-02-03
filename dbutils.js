@@ -42,27 +42,32 @@ function DBWrapper() {
   
   function _list(srch, lat, lon, since) {
     var bNear = (srch === 'nearby' && lat !== 0 && lon !== 0 ),
-      d = Q.defer(), d2;
+      d = Q.defer(), d2, findObj = {};
     if (bNear) {
       //Find user in given 10KM radius
-      d2 = model.findQ({
+      _.extend(findObj, {
         loc: {
           $near : { $geometry: {type: "Point", coordinates: [lon, lat] },
             $maxDistance : 10000
           }
         }
       });
-    } else {
-      d2 = model.findQ();
     }
-    d2.then(function(doc){
+    
+    //what about timestamp check
+    since = (_.isNumber(since) && !isNaN(since) ) ? since : 0;
+    
+    if(since) {
+      _.extend(findObj, {'modified': {$gte : new Date(since)}});
+    }
+    model.findQ(findObj).then(function(doc){
       //console.log(JSON.stringify(doc));
       //map and extract only necessary fields
       var u = _(doc)
         .filter(function(v) {
             var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; 
         }).map(function (v) {
-           return {'name': v.name, 'email': v.email, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; 
+           return {'name': v.name, 'email': v.email, 'phone' : v.phone, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; 
         }).value();
       d.resolve(u);
     }, function (e) {

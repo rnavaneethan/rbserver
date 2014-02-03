@@ -11,7 +11,8 @@ var port = 3000,
   dbHost = 'localhost', dbName = 'rb',
   _result = {
       'code': 'fail',
-      'msg':'unexpected result'
+      'msg':'unexpected result',
+      'ts':0
     };
 
 /*start the server*/
@@ -48,13 +49,16 @@ function apiErrHandler(err, req, response, next) {
   response.render('default', _result);
 }
 
+function getResultTemplate() {
+  return _.extend(_result, {'ts': new Date().getTime()});
+}
 function list(req, res, n) {
   //Extract the query param and pass it on to the DB query handler
   var srch = req.query.search || '',
     lat = req.query.lat || 0,
     lon = req.query.lon || 0,
-    since = req.query.since || 0,
-    result = _result;
+    since = parseInt(req.query.since, 10) || 0,
+    result = getResultTemplate() ;
   dbu.list(srch, lat, lon, since).then(function (r) {
     result.code = 'ok';
     result.msg = '';
@@ -72,7 +76,7 @@ function register(req, res, n) {
     email = req.query.email || '',
     phone = req.query.phone || '',
     gcm = req.query.gcm || '',
-    result = _result;
+    result = getResultTemplate();
   dbu.register(user, email, phone, gcm).then(function(r) {
     result.code = "ok";
     result.msg = r;
@@ -86,9 +90,9 @@ function register(req, res, n) {
 function update(req, res, n) {
   var user = req.query.user || '',
     email = req.query.email || '',
-    lat = req.query.lat || 0,
-    lon = req.query.lon || 0,
-    result = _result;
+    lat = parseFloat(req.query.lat) || 0,
+    lon = parseFloat(req.query.lon) || 0,
+    result = getResultTemplate();
   var def = dbu.update(user, email, lat, lon).then(function(r){
     result.code = 'ok';
     result.msg = r;
@@ -124,10 +128,7 @@ function update(req, res, n) {
 function notify(req, response, next) {
   var to = req.query.to || '',
     m = req.query.msg || '',
-    result = {
-      code: 'fail',
-      msg: '' 
-    };
+    result = getResultTemplate();
   _notify(to, m).then(function(r) {
     result.code = "ok";
     result.msg = r;

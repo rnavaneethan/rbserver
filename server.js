@@ -57,6 +57,7 @@ function list(req, res, n) {
     result = _result;
   dbu.list(srch, lat, lon, since).then(function (r) {
     result.code = 'ok';
+    result.msg = '';
     result.users = r;
   }, function (r) {
     result.code = 'fail';

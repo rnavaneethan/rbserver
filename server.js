@@ -40,6 +40,7 @@ var apiv1 = connect()
   .use('/notify', notify)
   .use('/update', update)
   .use('/list', list)
+  .use('/riderequest',riderequest)
   .use(apiErrHandler);  //API error handler
   
 app.use('/api/v1', apiv1);
@@ -139,6 +140,34 @@ function notify(req, response, next) {
   });
 }
 
+function riderequest(req, res, next) {
+  var user = req.query.user || '',
+    from = _((req.query.from || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value(), //[lon, lat]
+    to = _((req.query.to || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value(),
+    result = getResultTemplate();
+  //validate input field
+  if(!user.length || from[0] === 0 || from[1] === 0 || to[0] === 0 || to[1] === 0 ) {
+    result.msg = 'Invalid params';
+    res.render('default', result);
+    return;
+  }
+  
+  //Get if user has valid gcmID
+  dbu.query(user).then(function(info) {
+    if(!_.isEmpty(info) && user.gcmID.length && user.gcmID.indexOf('fake_gcm') !== 0) {
+      //Try to add request to the request table
+      //try to send GCM request
+      
+    } else {
+      result.msg = 'Request user needs valid gcmID. Please re-register';
+    }
+  }, function (info) {
+    console.log('OnFailure User Info' + JSON.stringify(info));
+  }).finally(function () {
+    res.render('default', result);
+  });  
+}
+
 function sendGCM(gcmID, msg) {
   
   var o = {
@@ -149,13 +178,18 @@ function sendGCM(gcmID, msg) {
     headers: {
       'Authorization': 'key=AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s'
     }
-  };
+  }, d = Q.defer();
   var params = qs.stringify({registration_id: gcmID, 'data.message': msg});
   o.path += '?' + params;
   console.log('GCM: ' + o.path);
-  http.request(o, function() {
+  var req = http.request(o, function(res) {
+    res.on('end', function () {
+      d.resolve('Successfully sent GCM request');
+    });
   }).on('error', function () {
+    d.reject('Unable to send GCM request');
   });
-  return;
+  req.end();
+  return d.promise;
 }
 

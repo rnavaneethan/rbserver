@@ -7,13 +7,19 @@ function DBWrapper() {
   var dbHost = 'localhost', 
     dbName = 'rb',
     bInit = false,
-    db = null, model = null,
+    db = null, model = null, requestModel = null,
     userSchema = new mongoose.Schema({
       'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
       'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
       'gcmID' : {type: String, unique: true, required: true},
       'phone': {type: String},
       'loc': { type: [Number], index: '2dsphere'}
+    }),
+    requestSchema = new mongoose.Schema({
+      'requser': {type: String, select: true, unique: true, index:true, required: true, dropDups: true},  //we allow only one request per user
+      'accuser': {type: String, select: true},
+      'fromloc': {type: [Number], index: '2dsphere'},
+      'toloc': {type: [Number], index: '2dsphere'}
     });
   function _init(h,n) {
     h = h || dbHost;
@@ -35,6 +41,10 @@ function DBWrapper() {
       userSchema.plugin(createdModifiedPlugin, {index: true});
       userSchema.index({'loc': '2dsphere'});
       model = db.model('user', userSchema);
+      
+      requestSchema.plugin(createdModifiedPlugin, {index: true});
+      requestSchema.index({'fromloc': '2dsphere', 'toloc':'2dsphere'});
+      requestModel = db.model('requests', requestSchema);
       d.resolve();
     });
     return d.promise;
@@ -167,11 +177,107 @@ function DBWrapper() {
 
     return d.promise;
   }
+  function _query(user) {
+    var d = Q.defer(),userInfo = {};
+    if(!user.length) {
+      d.reject(userInfo);
+    }
+    //Let's query DB now
+    model.findOneQ({name: user}).then(function (doc) {
+      
+      if(doc) {
+        _.extend(userInfo, {name: doc.name, email: doc.email, phone: doc.phone, gcmID: (doc.gcmID || ''), loc: doc.loc});
+        d.resolve(userInfo);
+
+      }else {
+        d.reject(userInfo);        
+      }
+    },function (e) {
+      d.reject(userInfo);
+    });
+    return d.promise;
+  }
+  
+  function _getRequest(user, id) {
+    var userOrId = (user || id || ''), d = Q.defer(), reqInfo = {};
+    if(!userOrId.length) {
+      d.reject(reqInfo);
+    }
+    //Build query and query the table
+    requestModel.where({'requser': userOrId}).or({_id: userorId}).findOneQ(function (doc) {
+      if(doc) {
+        _.extend(reqInfo, {
+          id: doc._id,
+          requser: doc.requser,
+          accuser: (doc.accuser || ''),
+          fromloc: doc.fromloc,
+          toloc: doc.toloc
+        });
+      }
+    }).finally(function () {
+      d.resolve(reqInfo);
+    });
+    return d.promise;
+  }
+  
+  function _addRequest(user, from, to) {
+    var d = Q.defer(), reqInfo = {};
+    
+    //do input validation
+    if(!user.length || !_.isArray(from) || !_.reduce([from, to], function (memo, v) {
+      if(!memo) {
+        //skip further check
+        return memo;
+      }
+      return _.isArray(v) && v.length === 2 && _.isNumber(v[0]) && !_.isNaN(v[0]) && _.isNumber(v[1]) && !_.isNaN(v[1]);
+    }, true)) {
+      d.reject(reqInfo);
+    }
+    //Add a query which will insert/update the existing one based on user
+    _getRequest(user).then(function(reqInfo) {
+      if (_.isEmpty(reqInfo)) {
+        //There are no previous request for the user
+        //Let's insert a new one
+        var req = new requestModel();
+        req.requser = user;
+        req.fromloc = from;
+        req.toloc = to;
+        req.save(function(e, p) {
+          if (e) {
+            console.log(e);
+            d.reject(reqInfo);
+          }
+          //update response object
+          _.extend(reqInfo, {id: p._id, requser: p.requser, fromloc: p.fromloc, toloc: p.toloc});
+          d.resolve(reqInfo);
+        });
+      } else {
+        //Update the existing request
+        requestModel.findOneAndUpdateQ({requser: user},{fromloc: from, toloc: to, accuser: ''},{new: true}).then(function (doc) {
+          if (doc) {
+            _.extend(reqInfo, {id: doc._id, requser: doc.requser, fromloc: doc.fromloc, toloc: doc.toloc});
+          }
+          d.resolve(reqInfo);
+        }, function (e) {
+          d.reject(reqInfo);
+        });
+      }
+    }, function () {
+      d.reject(reqInfo);
+    });
+    return d.promise;
+  }
+  function _acceptRequest() {
+  }
   return {
     init: _init,
     list: _list,
     register: _register,
-    update: _update
+    update: _update,
+    query: _query,
+    getRequest: _getRequest,
+    addRequest: _addRequest,
+    acceptRequest: _acceptRequest
   };
 }
 

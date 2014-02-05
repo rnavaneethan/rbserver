@@ -16,10 +16,10 @@ function DBWrapper() {
       'loc': { type: [Number], index: '2dsphere'}
     }),
     requestSchema = new mongoose.Schema({
-      'requser': {type: String, select: true, unique: true, index:true, required: true, dropDups: true},  //we allow only one request per user
-      'accuser': {type: String, select: true},
-      'fromloc': {type: [Number], index: '2dsphere'},
-      'toloc': {type: [Number], index: '2dsphere'}
+      'requser': {type: String, select: true, unique: true, index:true, required: true, dropDups: true},
+      'accuser': {type: String, required: false},
+      'fromloc': {type: [Number], index: '2dsphere', required: true},
+      'toloc': {type: [Number], index: '2dsphere', required: true}
     });
   function _init(h,n) {
     h = h || dbHost;
@@ -40,11 +40,11 @@ function DBWrapper() {
     db.once('open', function cb(){
       userSchema.plugin(createdModifiedPlugin, {index: true});
       userSchema.index({'loc': '2dsphere'});
-      model = db.model('user', userSchema);
+      model = mongoose.model('user', userSchema);
       
       requestSchema.plugin(createdModifiedPlugin, {index: true});
       requestSchema.index({'fromloc': '2dsphere', 'toloc':'2dsphere'});
-      requestModel = db.model('requests', requestSchema);
+      requestModel = mongoose.model('request', requestSchema);
       d.resolve();
     });
     return d.promise;
@@ -204,7 +204,7 @@ function DBWrapper() {
       d.reject(reqInfo);
     }
     //Build query and query the table
-    requestModel.where({'requser': userOrId}).or({_id: userorId}).findOneQ(function (doc) {
+    requestModel.findOneQ({$or:[{'requser': userOrId}]}).then(function(doc) {
       if(doc) {
         _.extend(reqInfo, {
           id: doc._id,
@@ -234,28 +234,29 @@ function DBWrapper() {
       d.reject(reqInfo);
     }
     //Add a query which will insert/update the existing one based on user
-    _getRequest(user).then(function(reqInfo) {
-      if (_.isEmpty(reqInfo)) {
+    _getRequest(user).then(function(info) {
+      if (_.isEmpty(info)) {
         //There are no previous request for the user
         //Let's insert a new one
         var req = new requestModel();
         req.requser = user;
         req.fromloc = from;
         req.toloc = to;
-        req.save(function(e, p) {
+        
+        req.save(function(e,p) {
           if (e) {
             console.log(e);
             d.reject(reqInfo);
           }
           //update response object
-          _.extend(reqInfo, {id: p._id, requser: p.requser, fromloc: p.fromloc, toloc: p.toloc});
+          _.extend(reqInfo, {id: p._id, user: p.requser, fromloc: p.fromloc, toloc: p.toloc});
           d.resolve(reqInfo);
         });
       } else {
         //Update the existing request
         requestModel.findOneAndUpdateQ({requser: user},{fromloc: from, toloc: to, accuser: ''},{new: true}).then(function (doc) {
           if (doc) {
-            _.extend(reqInfo, {id: doc._id, requser: doc.requser, fromloc: doc.fromloc, toloc: doc.toloc});
+            _.extend(reqInfo, {id: doc._id, user: doc.requser, fromloc: doc.fromloc, toloc: doc.toloc});
           }
           d.resolve(reqInfo);
         }, function (e) {
@@ -269,12 +270,27 @@ function DBWrapper() {
   }
   function _acceptRequest() {
   }
+  function _getValidGCMUsers() {
+    //returns valid users with GCMId
+    var d = Q.defer(),result = {};
+    model.where({gcmID: /^[^f][^a][^k][^e][^_]/i},'name gcmID').findQ().then(function (doc){
+      if(doc) {
+        result = _.reduce(doc, function(m, v) {m[v.name] = v.gcmID; return m;},result);
+      }
+      d.resolve(result);
+  	}, function () {
+  	  console.log('Unable to get users by gcmID','name gcmID');
+  	  d.reject(result);
+	  });
+    return d.promise;
+  }
   return {
     init: _init,
     list: _list,
     register: _register,
     update: _update,
     query: _query,
+    getValidGCMUsers: _getValidGCMUsers, 
     getRequest: _getRequest,
     addRequest: _addRequest,
     acceptRequest: _acceptRequest

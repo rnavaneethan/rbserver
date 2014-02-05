@@ -151,9 +151,42 @@ function riderequest(req, res, next) {
     res.render('default', result);
     return;
   }
+  dbu.getValidGCMUsers().then(function(mapGCM) {
+    console.log('Got GCM list ' + JSON.stringify(mapGCM));
+    //The requested user should have valid GCMID
+    if(!_(mapGCM).has(user)) {
+      result.msg = "User doesn't have valid GCMID. Please re-register";
+      res.render('default', result);
+      return;
+    }
+    //Try to add request to the request table
+    dbu.addRequest(user, from, to).then(function(reqInfo){
+      //Added request successfully to the table      
+      _.extend(reqInfo, {'type':'riderequest'});
+      var sRequest = JSON.stringify(reqInfo);
+      console.log('Added request ' + sRequest);
+      //send the request to all valid GCM users
+      _(mapGCM).values().each(function(v){
+        sendGCM(v, sRequest);
+      });
+      result.code = 'ok';
+      result.msg = ''; 
+      res.render('default',result);
+    }, function(){
+      result.msg = 'Unable to add this request to the table';
+      res.render('default',result);  
+    });
+    
+  }, function(){
+    console.log('Failed to get GCM list');
+    result.msg = 'Unexpected DB error';
+    res.render('default',result);
+  });
+  
+  
   
   //Get if user has valid gcmID
-  dbu.query(user).then(function(info) {
+  /*dbu.query(user).then(function(info) {
     if(!_.isEmpty(info) && user.gcmID.length && user.gcmID.indexOf('fake_gcm') !== 0) {
       //Try to add request to the request table
       //try to send GCM request
@@ -165,7 +198,7 @@ function riderequest(req, res, next) {
     console.log('OnFailure User Info' + JSON.stringify(info));
   }).finally(function () {
     res.render('default', result);
-  });  
+  });*/  
 }
 
 function sendGCM(gcmID, msg) {

@@ -41,6 +41,7 @@ var apiv1 = connect()
   .use('/update', update)
   .use('/list', list)
   .use('/riderequest',riderequest)
+  .use('/rideaccept',rideaccept)
   .use(apiErrHandler);  //API error handler
   
 app.use('/api/v1', apiv1);
@@ -166,7 +167,7 @@ function riderequest(req, res, next) {
       var sRequest = JSON.stringify(reqInfo);
       console.log('Added request ' + sRequest);
       //send the request to all valid GCM users
-      _(mapGCM).values().each(function(v){
+      _(mapGCM).values().uniq().each(function(v){
         sendGCM(v, sRequest);
       });
       result.code = 'ok';
@@ -181,24 +182,30 @@ function riderequest(req, res, next) {
     console.log('Failed to get GCM list');
     result.msg = 'Unexpected DB error';
     res.render('default',result);
-  });
-  
-  
-  
-  //Get if user has valid gcmID
-  /*dbu.query(user).then(function(info) {
-    if(!_.isEmpty(info) && user.gcmID.length && user.gcmID.indexOf('fake_gcm') !== 0) {
-      //Try to add request to the request table
-      //try to send GCM request
-      
-    } else {
-      result.msg = 'Request user needs valid gcmID. Please re-register';
-    }
-  }, function (info) {
-    console.log('OnFailure User Info' + JSON.stringify(info));
+  });  
+}
+
+function rideaccept(req, res, next) {
+  var user = req.query.user || '',
+    id = req.query.id || '',
+    result = getResultTemplate();
+  //validate input field
+  if(!user.length || !id.length ) {
+    result.msg = 'Invalid params';
+    res.render('default', result);
+    return;
+  }
+  dbu.acceptRequest(user, id).then(function (info) {
+    //Let's send GCM for requestor
+    var GCMInfo = _.pluck(info, 'id','user','accuser');
+    _.extend(GCMInfo, {type: 'rideaccept'});
+    sendGCM(info.reqgcmID, JSON.stringify(GCMInfo));
+    result.code = 'ok';result.msg='';
+  }, function (s) {
+    result.msg = s;
   }).finally(function () {
     res.render('default', result);
-  });*/  
+  });
 }
 
 function sendGCM(gcmID, msg) {

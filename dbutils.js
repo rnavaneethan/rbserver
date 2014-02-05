@@ -268,12 +268,43 @@ function DBWrapper() {
     });
     return d.promise;
   }
-  function _acceptRequest() {
+  function _acceptRequest(accuser,id) {
+    var d = Q.defer(), result = {};
+    //input validation
+    if( !accuser.length || !id.length || id.indexOf('fake_gcm') === 0) {
+      d.reject('Invalid params!');
+    }
+    
+    //the user going to accept is valid user? & we have valid request ID
+    Q.all([_query(accuser), requestModel.findOneQ({"_id": id})]).spread(function(accusr, doc){
+      //requestor is valid user && the document object exists
+      if (!_.isEmpty(accusr) && doc && doc.requser.length && accuser !== doc.requser) {
+        //get details about req user & update the record with accepted user and serve response
+        Q.all([_query(doc.requser), requestModel.findOneAndUpdateQ({"_id" : id}, {'accuser': accuser}, {new: true})]).spread(function (requsr, doc2) {
+          _.extend(result, {
+            id: doc2._id,
+            user: doc2.requser,
+            accuser: doc2.accuser,
+            fromloc: doc2.fromloc,
+            toloc: doc2.toloc,
+            reqgcmID: requsr.gcmID,
+            accgcmID: accusr.gcmID
+          });
+          d.resolve(result);
+        },function () {
+          d.reject('Unable to update');
+        });
+        
+      }else {
+        d.reject('Unexpected error');
+      }
+    });
+    return d.promise;
   }
   function _getValidGCMUsers() {
     //returns valid users with GCMId
     var d = Q.defer(),result = {};
-    model.where({gcmID: /^[^f][^a][^k][^e][^_]/i},'name gcmID').findQ().then(function (doc){
+    model.where({gcmID: {$not: /^fake_gcm_/}},'name gcmID').findQ().then(function (doc){
       if(doc) {
         result = _.reduce(doc, function(m, v) {m[v.name] = v.gcmID; return m;},result);
       }

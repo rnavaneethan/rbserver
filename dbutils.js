@@ -11,7 +11,7 @@ function DBWrapper() {
     userSchema = new mongoose.Schema({
       'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
       'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
-      'gcmID' : {type: String, unique: true, required: true},
+      'gcmID' : {type: String},
       'phone': {type: String},
       'loc': { type: [Number], index: '2dsphere'},
       'created':{type: Date},
@@ -98,7 +98,7 @@ function DBWrapper() {
  
     e = e || _.uniqueId('fake_email_');
     p = p || _.uniqueId('fake_phone_');
-    g = g || _.uniqueId('fake_gcm_');
+    g = g || 'fake_gcm_';
     //g = g || defGCM;
     if (e.length === 0) {
       msg = "Please send valid email address!";

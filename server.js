@@ -131,7 +131,7 @@ function notify(req, response, next) {
   var to = req.query.to || '',
     m = req.query.msg || '',
     result = getResultTemplate();
-  _notify(to, m).then(function(r) {
+  sendGCM(to, m).then(function(r) {
     result.code = "ok";
     result.msg = r;
   }, function (r) {
@@ -195,13 +195,16 @@ function rideaccept(req, res, next) {
     res.render('default', result);
     return;
   }
+  console.log('Get details for accepting request - ' + id + ' ' + user);
   dbu.acceptRequest(user, id).then(function (info) {
     //Let's send GCM for requestor
+    console.log('After accept ' + JSON.stringify(info));
     var GCMInfo = _.pluck(info, 'id','user','accuser');
     _.extend(GCMInfo, {type: 'rideaccept'});
     sendGCM(info.reqgcmID, JSON.stringify(GCMInfo));
     result.code = 'ok';result.msg='';
   }, function (s) {
+    console.log(s);
     result.msg = s;
   }).finally(function () {
     res.render('default', result);
@@ -216,17 +219,26 @@ function sendGCM(gcmID, msg) {
     path: '/gcm/send',
     method: 'GET',
     headers: {
-      'Authorization': 'key=AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s'
+      'Authorization': 'key=AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s',
+      'Content-Type':'application/x-www/form/urlencoded;charset=UTF-8'
     }
   }, d = Q.defer();
   var params = qs.stringify({registration_id: gcmID, 'data.message': msg});
   o.path += '?' + params;
   console.log('GCM: ' + o.path);
   var req = http.request(o, function(res) {
-    res.on('end', function () {
+    console.log('on GCM response ' + JSON.stringify(res));
+    res.setEncoding('utf8');
+    var data = '';
+    res.on('data', function(c) {
+      data += c;
+    }).on('end', function () {
+      console.log('successfully sent request & response is ' + data);
       d.resolve('Successfully sent GCM request');
     });
-  }).on('error', function () {
+  });
+  req.on('error', function (e) {
+    console.log('Failed to send request ' + e.message);
     d.reject('Unable to send GCM request');
   });
   req.end();

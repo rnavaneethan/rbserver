@@ -1,7 +1,8 @@
 var mongoose= require('mongoose-q')(),
   Q = require('q'),
   createdModifiedPlugin = require('mongoose-createdmodified').createdModifiedPlugin,
-  _ = require('lodash');
+  _ = require('lodash'),
+  defGCM = 'APA91bG21dzWPgpabcgfXm_zmxx1ouYjM2PJol6JQd9uD5idpijorwYUBc-Kit69ScC3KGaih8Oow_M7QidUG7aPdq_fnrTfGOagB9AOkJ1a3nmwcpX9DrcjrGbrOElhqj0s1YNtfWWxoOfnpx5DwpLteCm8uz3g1g';
 
 function DBWrapper() {
   var dbHost = 'localhost', 
@@ -77,7 +78,7 @@ function DBWrapper() {
         .filter(function(v) {
             var lat = 0, lon = 0; if(v.loc) { lon = v.loc[0]; lat = v.loc[1];} return lat != 0 && lon != 0; 
         }).map(function (v) {
-           return {'name': v.name, 'email': v.email, 'phone' : v.phone, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0"}; 
+           return {'name': v.name, 'email': v.email, 'phone' : v.phone, 'loc': v.loc, 'lon': v.loc ? v.loc[0] : "0", 'lat': v.loc ? v.loc[1] : "0", 'modified': new Date(v.modified).getTime()}; 
         }).value();
       d.resolve(u);
     }, function (e) {
@@ -97,6 +98,7 @@ function DBWrapper() {
     e = e || _.uniqueId('fake_email_');
     p = p || _.uniqueId('fake_phone_');
     g = g || _.uniqueId('fake_gcm_');
+    //g = g || defGCM;
     if (e.length === 0) {
       msg = "Please send valid email address!";
       bFailed = true;
@@ -162,7 +164,7 @@ function DBWrapper() {
     model.where({name: n}).findOneQ().then(function(doc){
       if(doc) {
         //update to DB
-        model.findOneAndUpdateQ({name: n}, {'loc': [lon, lat]}, {new: true}).then(function (doc2) {  
+        model.findOneAndUpdateQ({name: n}, {'loc': [lon, lat], 'modified': new Date()}, {new: true}).then(function (doc2) {  
           d.resolve('Updated');
         }, function(e) {
           d.reject('Failed to update!');
@@ -271,7 +273,7 @@ function DBWrapper() {
   function _acceptRequest(accuser,id) {
     var d = Q.defer(), result = {};
     //input validation
-    if( !accuser.length || !id.length || id.indexOf('fake_gcm') === 0) {
+    if( !accuser.length || !id.length ) {
       d.reject('Invalid params!');
     }
     
@@ -329,3 +331,4 @@ function DBWrapper() {
 }
 
 module.exports = DBWrapper;
+

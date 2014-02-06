@@ -1,6 +1,5 @@
 var mongoose= require('mongoose-q')(),
   Q = require('q'),
-  createdModifiedPlugin = require('mongoose-createdmodified').createdModifiedPlugin,
   _ = require('lodash');
 
 function DBWrapper() {
@@ -13,13 +12,17 @@ function DBWrapper() {
       'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
       'gcmID' : {type: String, unique: true, required: true},
       'phone': {type: String},
-      'loc': { type: [Number], index: '2dsphere'}
+      'loc': { type: [Number], index: '2dsphere'},
+      'created':{type: Date},
+      'modified':{type: Date, index: true}
     }),
     requestSchema = new mongoose.Schema({
       'requser': {type: String, select: true, unique: true, index:true, required: true, dropDups: true},
       'accuser': {type: String, required: false},
       'fromloc': {type: [Number], index: '2dsphere', required: true},
-      'toloc': {type: [Number], index: '2dsphere', required: true}
+      'toloc': {type: [Number], index: '2dsphere', required: true},
+      'created':{type: Date},
+      'modified':{type: Date, index: true}
     });
   function _init(h,n) {
     h = h || dbHost;
@@ -38,11 +41,9 @@ function DBWrapper() {
       d.reject('DB connection failed');
     });
     db.once('open', function cb(){
-      userSchema.plugin(createdModifiedPlugin, {index: true});
       userSchema.index({'loc': '2dsphere'});
       model = mongoose.model('user', userSchema);
       
-      requestSchema.plugin(createdModifiedPlugin, {index: true});
       requestSchema.index({'fromloc': '2dsphere', 'toloc':'2dsphere'});
       requestModel = mongoose.model('request', requestSchema);
       d.resolve();
@@ -124,6 +125,7 @@ function DBWrapper() {
         user.email = e;
         user.phone = p;
         user.gcmID = g;
+        user.created = user.modified = new Date();
         user.save(function(e) {
           if (e) {
             console.log(e);
@@ -140,7 +142,7 @@ function DBWrapper() {
     return d.promise;
   }
   
-  function _update(n, e, lat, lon) {
+  function _update(n, e, lat, lon, gcm) {
     console.log('on update');
     var msg = "", bFailed = false;
     var d = Q.defer();
@@ -150,7 +152,7 @@ function DBWrapper() {
     } /*else if (e.length === 0) {
       msg = "Please send valid email address!";
       bFailed = true;
-    } */else if (lat === 0 || lon === 0) {
+    } */else if (lat === 0 || lon === 0 || !gcm.length) {
       bFailed = true;
     }
     if(bFailed) {
@@ -161,12 +163,23 @@ function DBWrapper() {
     //only if user is in DB, update it
     model.where({name: n}).findOneQ().then(function(doc){
       if(doc) {
-        //update to DB
-        model.findOneAndUpdateQ({name: n}, {'loc': [lon, lat]}, {new: true}).then(function (doc2) {  
-          d.resolve('Updated');
-        }, function(e) {
-          d.reject('Failed to update!');
-        });
+        var updateObj = {};
+        if (lat !== && lon !== 0) {
+          _.extend(updateObj, {'loc': [lon, lat]);
+        }
+        if(gcm.length) {
+          _.extend(updateObj, {gcmID, gcm});
+        }
+        if (!_.isEmpty(updateObj)) {
+          _.extend(updateObj, {modified: new Date()});
+
+          //update to DB
+          model.findOneAndUpdateQ({name: n}, updateObj, {new: true}).then(function (doc2) {  
+            d.resolve('Updated');
+          }, function(e) {
+            d.reject('Failed to update!');
+          });
+        }
       } else {
         d.reject('USER_NOT_FOUND');
       }
@@ -242,7 +255,7 @@ function DBWrapper() {
         req.requser = user;
         req.fromloc = from;
         req.toloc = to;
-        
+        req.created = req.modified = new Date();
         req.save(function(e,p) {
           if (e) {
             console.log(e);
@@ -254,7 +267,7 @@ function DBWrapper() {
         });
       } else {
         //Update the existing request
-        requestModel.findOneAndUpdateQ({requser: user},{fromloc: from, toloc: to, accuser: ''},{new: true}).then(function (doc) {
+        requestModel.findOneAndUpdateQ({requser: user},{fromloc: from, toloc: to, accuser: '', modified: new Date()},{new: true}).then(function (doc) {
           if (doc) {
             _.extend(reqInfo, {id: doc._id, user: doc.requser, fromloc: doc.fromloc, toloc: doc.toloc});
           }
@@ -280,7 +293,7 @@ function DBWrapper() {
       //requestor is valid user && the document object exists
       if (!_.isEmpty(accusr) && doc && doc.requser.length && accuser !== doc.requser) {
         //get details about req user & update the record with accepted user and serve response
-        Q.all([_query(doc.requser), requestModel.findOneAndUpdateQ({"_id" : id}, {'accuser': accuser}, {new: true})]).spread(function (requsr, doc2) {
+        Q.all([_query(doc.requser), requestModel.findOneAndUpdateQ({"_id" : id}, {'accuser': accuser, modified: new Date()}, {new: true})]).spread(function (requsr, doc2) {
           _.extend(result, {
             id: doc2._id,
             user: doc2.requser,

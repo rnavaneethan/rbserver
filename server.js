@@ -94,8 +94,9 @@ function update(req, res, n) {
     email = req.query.email || '',
     lat = parseFloat(req.query.lat) || 0,
     lon = parseFloat(req.query.lon) || 0,
+    gcm = req.query.gcm || '',
     result = getResultTemplate();
-  var def = dbu.update(user, email, lat, lon).then(function(r){
+  var def = dbu.update(user, email, lat, lon, gcm).then(function(r){
     result.code = 'ok';
     result.msg = r;
   }, function(r) {

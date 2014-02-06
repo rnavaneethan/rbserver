@@ -4,7 +4,9 @@ var Q = require('q'),
   http = require('http'),
   qs = require('querystring'),
   _ = require('lodash'),
-  dbu = new require('./dbutils')();
+  gcm = require('node-gcm'),
+  dbu = new require('./dbutils')(),
+  gcmKey = 'AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s';
 
 /*Configurations*/
 var port = 3000,
@@ -132,7 +134,7 @@ function notify(req, response, next) {
   var to = req.query.to || '',
     m = req.query.msg || '',
     result = getResultTemplate();
-  sendGCM(to, m).then(function(r) {
+  sendGCM([to], m).then(function(r) {
     result.code = "ok";
     result.msg = r;
   }, function (r) {
@@ -166,14 +168,16 @@ function riderequest(req, res, next) {
       //Added request successfully to the table      
       _.extend(reqInfo, {'type':'riderequest'});
       var sRequest = JSON.stringify(reqInfo);
-      console.log('Added request ' + sRequest);
+      console.log('Added request ' + sRequest + ' ' + JSON.stringify(_(mapGCM).values().uniq().compact().value()) );
       //send the request to all valid GCM users
-      _(mapGCM).values().uniq().each(function(v){
-        sendGCM(v, sRequest);
+      sendGCM(_(mapGCM).values().uniq().compact().value(), sRequest).then(function (s) {
+        result.code = 'ok';
+        result.msg = s;
+      }, function (s) {
+        result.msg = s;
+      }).finally(function () {
+        res.render('default', result);
       });
-      result.code = 'ok';
-      result.msg = ''; 
-      res.render('default',result);
     }, function(){
       result.msg = 'Unable to add this request to the table';
       res.render('default',result);  
@@ -212,37 +216,32 @@ function rideaccept(req, res, next) {
   });
 }
 
-function sendGCM(gcmID, msg) {
+function sendGCM(gcmIDs, msg) {
+  var d = Q.defer();
+  //Do input validation
+  if(!gcmIDs.length || !msg.length ) {
+    d.reject('invalid params!');
+  }
   
-  var o = {
-    host: 'android.googleapis.com',
-    port: 443,
-    path: '/gcm/send',
-    method: 'GET',
-    headers: {
-      'Authorization': 'key=AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s',
-      'Content-Type':'application/x-www/form/urlencoded;charset=UTF-8'
-    }
-  }, d = Q.defer();
-  var params = qs.stringify({registration_id: gcmID, 'data.message': msg});
-  o.path += '?' + params;
-  console.log('GCM: ' + o.path);
-  var req = http.request(o, function(res) {
-    console.log('on GCM response ' + JSON.stringify(res));
-    res.setEncoding('utf8');
-    var data = '';
-    res.on('data', function(c) {
-      data += c;
-    }).on('end', function () {
-      console.log('successfully sent request & response is ' + data);
-      d.resolve('Successfully sent GCM request');
-    });
+  //Let's build GCM request and send it
+  var message = new gcm.Message({
+    data:{
+      'message': msg
+    },
+    delayWhileIdle: true,
+    timeToLive: 3/*,
+    dry_run: true*/
+  }), sender = new gcm.Sender(gcmKey);
+  
+  sender.send(message, gcmIDs, 1, function (e, res) {
+    e && console.log('Error ' + e);
+    res && console.log('result ' + JSON.stringify(res));
+    /*e && d.reject('Failed to send GCM ' + JSON.stringify(e));
+    res && d.resolve('Successfully sent GCM ' + JSON.stringify(res));*/
+    e && d.reject('Failed to send GCM');
+    res && d.resolve('Successfully sent GCM');
+    d.resolve();
   });
-  req.on('error', function (e) {
-    console.log('Failed to send request ' + e.message);
-    d.reject('Unable to send GCM request');
-  });
-  req.end();
   return d.promise;
 }
 

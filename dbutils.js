@@ -264,14 +264,14 @@ function DBWrapper() {
             d.reject(reqInfo);
           }
           //update response object
-          _.extend(reqInfo, {id: p._id, user: p.requser, fromloc: p.fromloc, toloc: p.toloc});
+          _.extend(reqInfo, {id: p._id, user: p.requser, from: p.fromloc, to: p.toloc});
           d.resolve(reqInfo);
         });
       } else {
         //Update the existing request
         requestModel.findOneAndUpdateQ({requser: user},{fromloc: from, toloc: to, accuser: '', modified: new Date()},{new: true}).then(function (doc) {
           if (doc) {
-            _.extend(reqInfo, {id: doc._id, user: doc.requser, fromloc: doc.fromloc, toloc: doc.toloc});
+            _.extend(reqInfo, {id: doc._id, user: doc.requser, from: doc.fromloc, to: doc.toloc});
           }
           d.resolve(reqInfo);
         }, function (e) {
@@ -300,8 +300,8 @@ function DBWrapper() {
             id: doc2._id,
             user: doc2.requser,
             accuser: doc2.accuser,
-            fromloc: doc2.fromloc,
-            toloc: doc2.toloc,
+            from: doc2.fromloc,
+            to: doc2.toloc,
             reqgcmID: requsr.gcmID,
             accgcmID: accusr.gcmID
           });
@@ -313,6 +313,8 @@ function DBWrapper() {
       }else {
         d.reject('Unexpected error');
       }
+    }, function(){
+      d.reject('Unable to find request');
     });
     return d.promise;
   }

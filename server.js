@@ -170,7 +170,7 @@ function riderequest(req, res, next) {
       var sRequest = JSON.stringify(reqInfo);
       console.log('Added request ' + sRequest + ' ' + JSON.stringify(_(mapGCM).values().uniq().compact().value()) );
       //send the request to all valid GCM users
-      sendGCM(_(mapGCM).values().uniq().compact().value(), sRequest).then(function (s) {
+      sendGCM(_(mapGCM).omit(user).values().uniq().compact().value(), sRequest).then(function (s) {
         result.code = 'ok';
         result.msg = s;
       }, function (s) {
@@ -203,10 +203,10 @@ function rideaccept(req, res, next) {
   console.log('Get details for accepting request - ' + id + ' ' + user);
   dbu.acceptRequest(user, id).then(function (info) {
     //Let's send GCM for requestor
-    console.log('After accept ' + JSON.stringify(info));
-    var GCMInfo = _.pluck(info, 'id','user','accuser');
+    var GCMInfo = _.pick(info, 'id','user','accuser');
     _.extend(GCMInfo, {type: 'rideaccept'});
-    sendGCM(info.reqgcmID, JSON.stringify(GCMInfo));
+    console.log('After accept ' + JSON.stringify(GCMInfo));
+    sendGCM([info.reqgcmID], JSON.stringify(GCMInfo));
     result.code = 'ok';result.msg='';
   }, function (s) {
     console.log(s);

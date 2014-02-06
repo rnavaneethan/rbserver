@@ -152,7 +152,7 @@ function DBWrapper() {
     } /*else if (e.length === 0) {
       msg = "Please send valid email address!";
       bFailed = true;
-    } */else if (lat === 0 || lon === 0 || !gcm.length) {
+    } */else if ( (lat === 0 || lon === 0) && !gcm.length) {
       bFailed = true;
     }
     if(bFailed) {
@@ -164,11 +164,11 @@ function DBWrapper() {
     model.where({name: n}).findOneQ().then(function(doc){
       if(doc) {
         var updateObj = {};
-        if (lat !== && lon !== 0) {
-          _.extend(updateObj, {'loc': [lon, lat]);
+        if (lat !== 0 && lon !== 0) {
+          _.extend(updateObj, {'loc': [lon, lat]});
         }
         if(gcm.length) {
-          _.extend(updateObj, {gcmID, gcm});
+          _.extend(updateObj, {gcmID: gcm});
         }
         if (!_.isEmpty(updateObj)) {
           _.extend(updateObj, {modified: new Date()});

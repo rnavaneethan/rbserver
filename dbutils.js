@@ -145,7 +145,6 @@ function DBWrapper() {
   }
   
   function _update(n, e, lat, lon, gcm) {
-    console.log('on update');
     var msg = "", bFailed = false;
     var d = Q.defer();
     if(n.length === 0 ) {
@@ -177,17 +176,17 @@ function DBWrapper() {
 
           //update to DB
           model.findOneAndUpdateQ({name: n}, updateObj, {new: true}).then(function (doc2) {  
-            d.resolve('Updated');
+            d.resolve('Updated ' + n);
           }, function(e) {
-            d.reject('Failed to update!');
+            d.reject('Failed to update!' + n);
           });
         }
       } else {
-        d.reject('USER_NOT_FOUND');
+        d.reject('Update: USER_NOT_FOUND ' + n);
       }
       
     }, function() {
-      d.reject('Unable to update doc');
+      d.reject('Unable to update ' + n);
     });
 
     return d.promise;
@@ -214,12 +213,14 @@ function DBWrapper() {
   }
   
   function _getRequest(user, id) {
-    var userOrId = (user || id || ''), d = Q.defer(), reqInfo = {};
-    if(!userOrId.length) {
+    var user = user || '', id = id || '', reqObj = {}, d = Q.defer(), reqInfo = {};
+    if(!user.length && !id.length) {
       d.reject(reqInfo);
     }
+    user.length && _.extend(reqObj, {'requser': user});
+    id.length && _.extend(reqObj, {'_id': id});
     //Build query and query the table
-    requestModel.findOneQ({$or:[{'requser': userOrId}]}).then(function(doc) {
+    requestModel.findOneQ(reqObj).then(function(doc) {
       if(doc) {
         _.extend(reqInfo, {
           id: doc._id,
@@ -248,9 +249,10 @@ function DBWrapper() {
     }, true)) {
       d.reject(reqInfo);
     }
+    //Let's remove existing request from same user and add new
     //Add a query which will insert/update the existing one based on user
-    _getRequest(user).then(function(info) {
-      if (_.isEmpty(info)) {
+    Q.allSettled([requestModel.removeQ({'requser':user}),_getRequest(user)]).spread(function(olddoc, info) {
+      if (info.state === 'fulfilled' && _.isEmpty(info.data)) {
         //There are no previous request for the user
         //Let's insert a new one
         var req = new requestModel();
@@ -291,30 +293,29 @@ function DBWrapper() {
     }
     
     //the user going to accept is valid user? & we have valid request ID
-    Q.all([_query(accuser), requestModel.findOneQ({"_id": id})]).spread(function(accusr, doc){
+    Q.all([_query(accuser), _getRequest(null, id)]).spread(function(accusr, doc){
       //requestor is valid user && the document object exists
-      if (!_.isEmpty(accusr) && doc && doc.requser.length && accuser !== doc.requser) {
-        //get details about req user & update the record with accepted user and serve response
-        Q.all([_query(doc.requser), requestModel.findOneAndUpdateQ({"_id" : id}, {'accuser': accuser, modified: new Date()}, {new: true})]).spread(function (requsr, doc2) {
-          _.extend(result, {
-            id: doc2._id,
-            user: doc2.requser,
-            accuser: doc2.accuser,
-            from: doc2.fromloc,
-            to: doc2.toloc,
-            reqgcmID: requsr.gcmID,
-            accgcmID: accusr.gcmID
-          });
-          d.resolve(result);
-        },function () {
-          d.reject('Unable to update');
+      _.isEmpty(accuser) && d.reject('acceptrequest: You are not a valid user ' + accuser);
+      _.isEmpty(doc) && d.reject('acceptrequest: Invalid/expired request ID ' + id);
+      (doc.requser.length && accuser === doc.requser ) && d.reject("acceptrequest: User can't accept his request " + accuser);
+      
+      //get details about req user & update the record with accepted user and serve response
+      Q.all([_query(doc.requser), requestModel.findOneAndUpdateQ({"_id" : id}, {'accuser': accuser, modified: new Date()}, {new: true})]).spread(function (requsr, doc2) {
+        _.extend(result, {
+          id: doc2._id,
+          user: doc2.requser,
+          accuser: doc2.accuser,
+          from: doc2.fromloc,
+          to: doc2.toloc,
+          reqgcmID: requsr.gcmID,
+          accgcmID: accusr.gcmID
         });
-        
-      }else {
-        d.reject('Unexpected error');
-      }
+        d.resolve(result);
+      },function () {
+        d.reject('acceptrequest: Unable to update'  + id + ' ' + accuser);
+      });
     }, function(){
-      d.reject('Unable to find request');
+      d.reject('acceptrequest: Unable to find request record ' + id + ' ' + accuser);
     });
     return d.promise;
   }

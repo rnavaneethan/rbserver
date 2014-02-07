@@ -156,7 +156,7 @@ function riderequest(req, res, next) {
     return;
   }
   dbu.getValidGCMUsers().then(function(mapGCM) {
-    console.log('Got GCM list ' + JSON.stringify(mapGCM));
+    
     //The requested user should have valid GCMID
     if(!_(mapGCM).has(user)) {
       result.msg = "User doesn't have valid GCMID. Please re-register";
@@ -168,9 +168,9 @@ function riderequest(req, res, next) {
       //Added request successfully to the table      
       _.extend(reqInfo, {'type':'riderequest'});
       var sRequest = JSON.stringify(reqInfo);
-      console.log('Added request ' + sRequest + ' ' + JSON.stringify(_(mapGCM).values().uniq().compact().value()) );
+      mapGCM = _(mapGCM).omit(user).values().uniq().compact().value();
       //send the request to all valid GCM users
-      sendGCM(_(mapGCM).omit(user).values().uniq().compact().value(), sRequest).then(function (s) {
+      sendGCM(mapGCM, sRequest).then(function (s) {
         result.code = 'ok';
         result.msg = s;
       }, function (s) {
@@ -178,8 +178,8 @@ function riderequest(req, res, next) {
       }).finally(function () {
         res.render('default', result);
       });
-    }, function(){
-      result.msg = 'Unable to add this request to the table';
+    }, function(s){
+      result.msg = JSON.stringify(s);
       res.render('default',result);  
     });
     
@@ -200,12 +200,11 @@ function rideaccept(req, res, next) {
     res.render('default', result);
     return;
   }
-  console.log('Get details for accepting request - ' + id + ' ' + user);
+  
   dbu.acceptRequest(user, id).then(function (info) {
     //Let's send GCM for requestor
     var GCMInfo = _.pick(info, 'id','user','accuser');
     _.extend(GCMInfo, {type: 'rideaccept'});
-    console.log('After accept ' + JSON.stringify(GCMInfo));
     sendGCM([info.reqgcmID], JSON.stringify(GCMInfo));
     result.code = 'ok';result.msg='';
   }, function (s) {
@@ -223,6 +222,7 @@ function sendGCM(gcmIDs, msg) {
     d.reject('invalid params!');
   }
   
+  console.log('Sending GCM Request MSG: ' + msg + ' IDs: ' + JSON.stringify(gcmIDs));
   //Let's build GCM request and send it
   var message = new gcm.Message({
     data:{

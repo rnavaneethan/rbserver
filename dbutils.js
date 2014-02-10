@@ -117,8 +117,7 @@ function DBWrapper() {
     }
     //Find if the user is available
     //Search by name / email address
-    
-    var qu = model.where({name: n}).or({email: e}).findOneQ().then(function(doc) {
+    var qu = model.where({name: n}).findOneQ().then(function(doc) {
     
       if(!doc) {
         //let's insert the new user
@@ -182,7 +181,19 @@ function DBWrapper() {
           });
         }
       } else {
-        d.reject('Update: USER_NOT_FOUND ' + n);
+        //d.reject('Update: USER_NOT_FOUND ' + n);
+        //Let's register & update
+        _register(n, e).then(function () {
+          //registration is successful
+          //let's set the lat & long value
+          _update(n, e, lat, lon, gcm).then(function (v) {
+            d.resolve(v);
+          },function (v) {
+            d.reject(v);
+          })
+        }, function () {
+          d.reject('Update: USER_NOT_FOUND ' + n);
+        });
       }
       
     }, function() {

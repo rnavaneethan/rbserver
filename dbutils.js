@@ -10,7 +10,7 @@ function DBWrapper() {
     db = null, model = null, requestModel = null,
     userSchema = new mongoose.Schema({
       'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
-      'email' : {type: String, select: true, unique: true, index: true, required: true, dropDups: true},
+      'email' : {type: String, select: true, index: true, required: true},
       'gcmID' : {type: String},
       'phone': {type: String},
       'loc': { type: [Number], index: '2dsphere'},

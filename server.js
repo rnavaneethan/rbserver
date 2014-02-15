@@ -7,7 +7,9 @@ var Q = require('q'),
   gcm = require('node-gcm'),
   dbu = new require('./dbutils')(),
   gcmKey = 'AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s',
+  fs = require('fs'),
   rq = require('request'),
+  crypto = require('crypto'),
   ffmpeg = require('fluent-ffmpeg');
 
 /*Configurations*/
@@ -56,19 +58,41 @@ var apiVideo = connect()
 app.use('/api/v1', apiv1);
 app.use('/video', apiVideo);
 
+function getVideoFileName(token) {
+  var h = crypto.createHash('md5').update(token).digest('hex'); 
+  return __dirname + '/videos/' + h + '.mp4';
+}
+function getVideoFile( token) {
+  var d = Q.defer(),
+  fName = getVideoFileName(token),
+  reqURL = 'http://webmailbb.netzero.net/cgi-bin/videomail.cgi?command=get_video&token=' + token;
+  fs.exists(fName, function (b) {
+    if(b) {
+      d.resolve('success');
+    } else {
+      var proc = new ffmpeg({source: rq.get(reqURL), nolog: true})
+        .withVideoCodec('libx264')
+        .withAudioCodec('libmp3lame')
+        .withAudioBitrate('128k')
+        .withVideoBitrate('512k')
+        .toFormat('mp4')
+        .saveToFile(fName, function (o,e) {
+          d.resolve('success');
+        });
+    }
+  });
+  return d.promise;
+}
 function getvideo(req, res, n) {
-  var token = req.query.token || '',
-    reqURL = 'http://webmailbb.netzero.net/cgi-bin/videomail.cgi?command=get_video&token=' + token;
+  var token = req.query.token || '';
   //build the get request
   if(token.length) {
-    console.log('got valid token ' + reqURL);
-    //create pipe for input stream
-    var proc = new ffmpeg({source: rq.get(reqURL), nolog:true})
-      .withVideoCodec('libx264')
-      .withAudioCodec('libfaac')
-       .toFormat('mp4')
-      .writeToStream(res, {end:true}, function(retcode, error){
-      console.log('file has been converted succesfully');
+    var hash = crypto.createHash('md5').update(token).digest('hex');
+    getVideoFile(token).done(function (s) {
+      if(s === 'success') {
+        res.contentType('video/mp4');
+        fs.createReadStream(getVideoFileName(token)).pipe(res);
+      }
     });
   }
 }

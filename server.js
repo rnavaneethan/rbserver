@@ -6,7 +6,9 @@ var Q = require('q'),
   _ = require('lodash'),
   gcm = require('node-gcm'),
   dbu = new require('./dbutils')(),
-  gcmKey = 'AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s';
+  gcmKey = 'AIzaSyAzeiq8Esbgx1FaFFocO0zN1-jCTcqMH-s',
+  rq = require('request'),
+  ffmpeg = require('fluent-ffmpeg');
 
 /*Configurations*/
 var port = 3000,
@@ -46,7 +48,30 @@ var apiv1 = connect()
   .use('/rideaccept',rideaccept)
   .use(apiErrHandler);  //API error handler
   
+var apiVideo = connect()
+  .use(connect.query())
+  .use('/getvideo',getvideo)
+  .use(apiErrHandler);  //generic error handler
+  
 app.use('/api/v1', apiv1);
+app.use('/video', apiVideo);
+
+function getvideo(req, res, n) {
+  var token = req.query.token || '',
+    reqURL = 'http://webmailbb.netzero.net/cgi-bin/videomail.cgi?command=get_video&token=' + token;
+  //build the get request
+  if(token.length) {
+    console.log('got valid token ' + reqURL);
+    //create pipe for input stream
+    var proc = new ffmpeg({source: rq.get(reqURL), nolog:true})
+      .withVideoCodec('libx264')
+      .withAudioCodec('libfaac')
+       .toFormat('mp4')
+      .writeToStream(res, {end:true}, function(retcode, error){
+      console.log('file has been converted succesfully');
+    });
+  }
+}
 
 function apiErrHandler(err, req, response, next) {
   console.error(err.stack);

@@ -1,16 +1,17 @@
 {
-  "name":"RideBuddyServer",
+  "name": "RideBuddyServer",
   "main": "./server.js",
-  "version" : "1.0.0",
+  "version": "1.0.0",
   "description": "NodeJS + MongoDB server for RideBuddy",
-  "dependencies" : {
-    "q" : "*",
-    "mongoose" : "*",
-    "mongoose-q" : "*",
+  "dependencies": {
+    "q": "*",
+    "mongoose": "*",
+    "mongoose-q": "*",
     "lodash": "*",
-    "express":"*",
+    "express": "*",
     "ejs": "*",
     "connect": "*",
-    "node-gcm":"*"
+    "node-gcm": "*",
+    "fluent-ffmpeg": "~1.5.2"
   }
 }

@@ -330,10 +330,20 @@ function DBWrapper() {
     });
     return d.promise;
   }
-  function _getValidGCMUsers() {
+  function _getValidGCMUsers(bNear, from) {
     //returns valid users with GCMId
-    var d = Q.defer(),result = {};
-    model.where({gcmID: {$not: /^fake_gcm_/}},'name gcmID').findQ().then(function (doc){
+    var d = Q.defer(),result = {},findObj = {gcmID: {$not: /^fake_gcm_/}};
+    if (bNear) {
+      //Find user in given 10KM radius
+      _.extend(findObj, {
+        loc: {
+          $near : { $geometry: {type: "Point", coordinates: from },
+            $maxDistance : 10000
+          }
+        }
+      });
+    }
+    model.where(findObj,'name gcmID').findQ().then(function (doc){
       if(doc) {
         result = _.reduce(doc, function(m, v) {m[v.name] = v.gcmID; return m;},result);
       }

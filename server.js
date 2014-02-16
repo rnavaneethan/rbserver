@@ -204,8 +204,8 @@ function riderequest(req, res, next) {
     res.render('default', result);
     return;
   }
-  dbu.getValidGCMUsers().then(function(mapGCM) {
-    
+  dbu.getValidGCMUsers(true, from).then(function(mapGCM) {
+    console.log('Valid nearby GCM users ' + JSON.stringify(mapGCM));
     //The requested user should have valid GCMID
     if(!_(mapGCM).has(user)) {
       result.msg = "User doesn't have valid GCMID. Please re-register";

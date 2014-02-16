@@ -195,8 +195,8 @@ function notify(req, response, next) {
 
 function riderequest(req, res, next) {
   var user = req.query.user || '',
-    from = _((req.query.from || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value(), //[lon, lat]
-    to = _((req.query.to || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value(),
+    from = _((req.query.from || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value().reverse(), //[lon, lat]
+    to = _((req.query.to || ',').split(',')).map(function(n) {var v = parseFloat(n); return (_.isNumber(v) && !_.isNaN(v) ) ? v : 0;}).value().reverse(),
     result = getResultTemplate();
   //validate input field
   if(!user.length || from[0] === 0 || from[1] === 0 || to[0] === 0 || to[1] === 0 ) {

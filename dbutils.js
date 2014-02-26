@@ -10,9 +10,10 @@ function DBWrapper() {
     db = null, model = null, requestModel = null,
     userSchema = new mongoose.Schema({
       'name' : {type: String, select: true, unique: true, dropDups: true, index: true, required: true},
-      'email' : {type: String, select: true, index: true, required: true},
-      'gcmID' : {type: String},
-      'phone': {type: String},
+      //'email' : {type: String, select: true, index: true, required: true, dropDups: true},
+      'email':{type:String, unique:false, index:false},
+      'gcmID' : {type: String, unique:false},
+      'phone': {type: String, dropDups: true, index:false},
       'loc': { type: [Number], index: '2dsphere'},
       'created':{type: Date},
       'modified':{type: Date, index: true}
@@ -96,9 +97,9 @@ function DBWrapper() {
       msg = 'User name is mandatory';
     }
  
-    e = e || _.uniqueId('fake_email_');
-    p = p || _.uniqueId('fake_phone_');
-    g = g || 'fake_gcm_';
+    e = e || new Date().getTime();//_.uniqueId('fake_email_');
+    p = p || new Date().getTime();//_.uniqueId('fake_phone_');
+    g = g || 'fake_gcm_' + new Date().getTime();
     //g = g || defGCM;
     if (e.length === 0) {
       msg = "Please send valid email address!";
